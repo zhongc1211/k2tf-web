@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# for react
 
 # dependencies
 /node_modules
@@ -22,6 +22,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# for go
 ky2tf
 k2tf
 .vscode/*
@@ -29,3 +30,5 @@ test-output/*
 dist
 .idea
 tmp
+main
+main.zip
