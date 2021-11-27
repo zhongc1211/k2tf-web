@@ -1,0 +1,9 @@
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: test
+spec:
+  minAvailable: 75%
+  selector:
+    matchLabels:
+      app: zookeeper
