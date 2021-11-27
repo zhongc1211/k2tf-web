@@ -1,7 +1,7 @@
 # for react
 
 # dependencies
-/node_modules
+front-react/node_modules
 /.pnp
 .pnp.js
 
@@ -9,7 +9,7 @@
 /coverage
 
 # production
-/build
+front-react/build
 
 # misc
 .DS_Store
