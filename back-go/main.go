@@ -1,21 +1,19 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/hashicorp/hcl/hcl/printer"
 	"github.com/hashicorp/hcl2/hclwrite"
-	"github.com/sl1pm4t/k2tf/pkg/tfkschema"
-	flag "github.com/spf13/pflag"
-	"os"
-
 	"github.com/rs/zerolog/log"
+	"github.com/sl1pm4t/k2tf/pkg/tfkschema"
 )
 
 // Build time variables
 var (
 	version = "dev"
-	commit  = "none"
-	date    = "unknown"
 )
 
 // Command line flags
@@ -30,40 +28,71 @@ var (
 	printVersion       bool
 )
 
+type RequestBody struct {
+	OverwriteExisting bool   `json:"OverwriteExisting"`
+	Debug             bool   `json:"Debug"`
+	Input             string `json:"Input"`
+	Output            string `json:"Output"`
+	InputUnsupported  bool 	 `json:"InputUnsupported"`
+	TF12Format        bool   `json:"TF12Format"`
+	PrintVersion      bool   `json:"PrintVersion"`
+}
+
+type Event events.APIGatewayProxyRequest
+
+type Response events.APIGatewayProxyResponse
+
 func init() {
-	// init command line flags
-	flag.BoolVarP(&overwriteExisting, "overwrite-existing", "x", false, "allow overwriting existing output file(s)")
-	flag.BoolVarP(&debug, "debug", "d", false, "enable debug output")
-	flag.StringVarP(&input, "filepath", "f", "-", `file or directory that contains the YAML configuration to convert. Use "-" to read from stdin`)
-	flag.StringVarP(&output, "output", "o", "-", `file or directory where Terraform config will be written`)
-	flag.BoolVarP(&includeUnsupported, "include-unsupported", "I", false, `set to true to include unsupported Attributes / Blocks in the generated TF config`)
-	flag.BoolVarP(&tf12format, "tf12format", "F", false, `Use Terraform 0.12 formatter`)
-	flag.BoolVarP(&printVersion, "version", "v", false, `Print k2tf version`)
-
-	flag.Parse()
-
 	setupLogOutput()
 }
 
 func main() {
+	lambda.Start(HandleLambdaEvent)
+}
+
+func HandleLambdaEvent(event Event) (Response, error) {
+	var payloadJson RequestBody
+	err := json.Unmarshal([]byte(event.Body), &payloadJson)
+	if err != nil {
+		return Response{}, err
+	}
+	overwriteExisting = payloadJson.OverwriteExisting
+	debug = payloadJson.Debug
+	input = payloadJson.Input
+	output = payloadJson.Output
+	includeUnsupported = payloadJson.InputUnsupported
+	tf12format = payloadJson.TF12Format
+	printVersion = payloadJson.PrintVersion
 	if printVersion {
 		fmt.Printf("k2tf version: %s\n", version)
-		os.Exit(0)
+		resp := Response{
+			StatusCode:      200,
+			IsBase64Encoded: false,
+			Body: 	fmt.Sprintf("k2tf version: %s\n", version),
+			Headers: map[string]string{
+				"Content-Type":           "application/json",
+				"Access-Control-Allow-Headers": "Content-Type",
+				"Access-Control-Allow-Origin": "*",
+				"Access-Control-Allow-Methods": "OPTIONS,POST",
+			},
+		}
+		return resp, nil
 	}
 
-	log.Debug().
-		Str("version", version).
-		Str("commit", commit).
-		Str("builddate", date).
-		Msg("starting k2tf")
-
+	//log.Debug().
+	//	Str("version", version).
+	//	Str("commit", commit).
+	//	Str("builddate", date).
+	//	Msg("starting k2tf")
+	fmt.Printf("Reading input yaml...\n")
 	objs := readInput()
 
-	log.Debug().Msgf("read %d objects from input", len(objs))
+	//log.Debug().Msgf("read %d objects from input", len(objs))
 
-	w, closer := setupOutput()
-	defer closer()
-
+	//w, closer := setupOutput()
+	//defer closer()
+	fmt.Printf("Writing objects...\n")
+	var results []byte
 	for i, obj := range objs {
 		if tfkschema.IsKubernetesKindSupported(obj) {
 			f := hclwrite.NewEmptyFile()
@@ -73,13 +102,27 @@ func main() {
 			}
 
 			formatted := formatObject(f.Bytes())
-
-			fmt.Fprint(w, string(formatted))
-			fmt.Fprintln(w)
+			fmt.Printf("%s\n", formatted)
+			results = append(results, formatted...)
+			//fmt.Fprint(w, string(formatted))
+			//fmt.Fprintln(w)
 		} else {
 			log.Warn().Str("kind", obj.GetObjectKind().GroupVersionKind().Kind).Msg("skipping API object, kind not supported by Terraform provider.")
 		}
 	}
+	fmt.Printf("Writing objects...ok\n")
+	resp := Response{
+		StatusCode:      200,
+		IsBase64Encoded: false,
+		Body: 	string(results),
+		Headers: map[string]string{
+			"Content-Type":           "application/json",
+			"Access-Control-Allow-Headers": "Content-Type",
+			"Access-Control-Allow-Origin": "*",
+			"Access-Control-Allow-Methods": "OPTIONS,POST",
+		},
+	}
+	return resp, nil
 }
 
 func formatObject(in []byte) []byte {

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -16,10 +17,11 @@ import (
 )
 
 func readInput() []runtime.Object {
-	if input == "-" || input == "" {
-		return readStdinInput()
-	}
-	return readFilesInput()
+	//if input == "-" || input == "" {
+	//	return readStdinInput()
+	//}
+	//return readFilesInput()
+	return readPayload()
 }
 
 func readStdinInput() []runtime.Object {
@@ -60,6 +62,43 @@ func readStdinInput() []runtime.Object {
 		}
 	}
 
+	return objs
+}
+
+func readPayload() []runtime.Object {
+	var objs []runtime.Object
+	fmt.Printf("Input received:\n%s\n\n", input)
+	fmt.Printf("Creating reader...\n")
+	reader := bytes.NewReader([]byte(input))
+	fmt.Printf("Creating reader...ok\n")
+	fmt.Printf("Parsing yaml...\n")
+	parsed, err := k8sparser.ParseYAML(reader)
+	fmt.Printf("Parsing yaml...ok\n")
+
+	if err != nil {
+		fmt.Printf("Could not parse payload\n")
+		log.Fatal().Err(err).Msg("Could not parse payload")
+	}
+	fmt.Printf("Appending objects...\n")
+	for _, obj := range parsed {
+		if obj.GetObjectKind().GroupVersionKind().Kind == "List" {
+			list := obj.(*corev1.List)
+			for _, item := range list.Items {
+				itemObj, err := k8sparser.ParseJSON(item.Raw)
+				if err != nil {
+					log.Error().Err(err)
+					continue
+				}
+				objs = append(objs, itemObj)
+
+			}
+
+		} else {
+			objs = append(objs, obj)
+
+		}
+	}
+	fmt.Printf("Appending objects...ok\n")
 	return objs
 }
 
