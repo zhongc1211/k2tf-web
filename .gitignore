@@ -32,3 +32,6 @@ dist
 tmp
 main
 main.zip
+
+# for terraform
+.terraform*
