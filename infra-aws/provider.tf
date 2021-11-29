@@ -9,9 +9,14 @@ terraform {
     aws = {
       source = "hashicorp/aws"
     }
+    cloudflare = {
+      source = "cloudflare/cloudflare"
+    }
   }
 }
 
 provider "aws" {
    region = "ap-southeast-1"
 }
+
+provider "cloudflare" {}
